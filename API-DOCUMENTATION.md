@@ -8,6 +8,8 @@ Passwordless Authentication API using One-Time Password (OTP) sent via email.
 http://localhost:8080/api/v1
 ```
 
+**Note:** The application supports Redis fallback mechanism and can run without Redis for development purposes using `--app.redis.enabled=false`.
+
 ## Authentication Endpoints
 
 ### 1. Request OTP
@@ -26,6 +28,32 @@ Content-Type: application/json
   "message": "OTP has been sent to your email",
   "email": "user@example.com",
   "expiresIn": "5"
+}
+```
+
+**Error Responses:**
+
+**400 Bad Request - Invalid Email:**
+```json
+{
+  "message": "INVALID MAIL",
+  "status": 400
+}
+```
+
+**400 Bad Request - Empty Request:**
+```json
+{
+  "message": "Email is required",
+  "status": 400
+}
+```
+
+**429 Too Many Requests - Rate Limit:**
+```json
+{
+  "message": "Too many OTP attempts. Please try again later.",
+  "status": 429
 }
 ```
 
@@ -52,16 +80,6 @@ Content-Type: application/json
 ```
 
 ### 3. Refresh Token
-```http
-POST /auth/refresh-token
-Content-Type: application/json
-
-{
-  "refreshToken": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
-}
-```
-
-### 4. Refresh Token
 ```http
 POST /auth/refresh-token
 Content-Type: application/json
@@ -278,17 +296,92 @@ Authorization: Bearer eyJhbGciOiJIUzI1NiJ9...
 ```
 
 ## Security Features
-- **Rate Limiting:** IP-based and user-based rate limiting
+- **Rate Limiting:** IP-based and user-based rate limiting (5 requests per email per minute)
 - **OTP Hashing:** OTPs are hashed using BCrypt before storage
-- **JWT Tokens:** Stateless authentication with access and refresh tokens
-- **Login History:** Tracks all login attempts with IP addresses
-- **Account Lockout:** Temporary account lock after multiple failed attempts
+- **JWT Tokens:** Stateless authentication with access (15m) and refresh (30d) tokens
+- **Login History:** Tracks all login attempts with IP addresses and timestamps
+- **Account Lockout:** Temporary account lock after multiple failed attempts (3 max)
 - **Token Rotation:** New tokens issued on each refresh
 - **Session Invalidation:** Logout clears server-side session data
+- **Email Validation:** Validates email existence in database before sending OTP
+- **Redis Fallback:** In-memory fallback ensures service availability even when Redis is down
+
+## 🔄 Redis Fallback Mechanism
+
+The application implements a sophisticated fallback system to ensure high availability:
+
+### How It Works
+1. **Primary Storage:** Redis database for OTP storage and rate limiting
+2. **Automatic Detection:** System detects Redis connectivity issues in real-time
+3. **Seamless Fallback:** Automatically switches to in-memory storage when Redis is unavailable
+4. **Graceful Recovery:** Returns to Redis when connectivity is restored
+
+### Development Configuration
+```bash
+# Disable Redis completely for development
+./mvnw spring-boot:run -Dspring-boot.run.arguments="--app.redis.enabled=false"
+```
+
+### Fallback Features
+- **OTP Storage:** ConcurrentHashMap with TTL management
+- **Rate Limiting:** In-memory counters for failed attempts
+- **Expiry Handling:** Automatic cleanup of expired OTPs
+- **Thread Safety:** Thread-safe operations using ConcurrentHashMap
+
+### Benefits
+- **High Availability:** Service continues working during Redis outages
+- **Development Friendly:** No Redis setup required for local development
+- **Production Resilience:** Automatic recovery from Redis failures
+- **Transparent Operation:** No API changes or client-side modifications needed
 
 ## Configuration
+
+### Application Properties
+```properties
+# OTP Configuration
+app.otp.expiration-minutes=5
+app.otp.length=6
+app.otp.max-attempts=3
+
+# JWT Configuration
+app.jwt.access-token-expiration-minutes=15
+app.jwt.refresh-token-expiration-days=30
+
+# Rate Limiting
+app.rate-limit.requests-per-minute=10
+app.rate-limit.max-otp-attempts=5
+
+# Redis Fallback
+app.redis.enabled=true  # Set false to disable Redis completely
+```
+
+### Default Values
 - **OTP Expiration:** 5 minutes
 - **Max OTP Attempts:** 3 attempts
 - **Access Token Expiration:** 15 minutes
 - **Refresh Token Expiration:** 30 days
 - **Rate Limit:** 10 requests per minute per IP
+- **Email Rate Limit:** 5 OTP requests per email per minute
+
+## 📝 Development Notes
+
+### Local Development Setup
+```bash
+# Run with Redis fallback only
+./mvnw spring-boot:run -Dspring-boot.run.arguments="--app.redis.enabled=false"
+
+# Or run with Redis
+docker-compose up postgres redis -d
+./mvnw spring-boot:run
+```
+
+### Testing
+- Use `api_testing.http` file for comprehensive API testing
+- OTP is displayed in console logs during development
+- Database schema is auto-created by Hibernate
+- Default admin user created automatically
+
+### Email Service
+- **Production:** SendGrid integration for email delivery
+- **Development:** OTP printed in console logs for easy testing
+- **Configuration:** Configure SendGrid API key in application.properties
