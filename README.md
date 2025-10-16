@@ -71,9 +71,16 @@ Aplikasi berjalan sebagai *microservice* yang diorkestrasi oleh Docker Compose.
     REDIS_HOST=redis
     REDIS_PORT=6379
 
-    # Email Service (Ganti dengan konfigurasi Anda, misal: SMTP atau SendGrid)
-    EMAIL_API_KEY=your_email_service_api_key
-    EMAIL_FROM=noreply@yourdomain.com
+    # Email Configuration (SendGrid)
+    spring.mail.host=smtp.sendgrid.net
+    spring.mail.port=587
+    spring.mail.username=apikey
+    spring.mail.password=your_api_key
+    spring.mail.properties.mail.smtp.auth=true
+    spring.mail.properties.mail.smtp.starttls.enable=true
+    spring.mail.properties.mail.smtp.trust=smtp.sendgrid.net
+    spring.mail.properties.mail.timeout=10000
+    spring.mail.debug=false
     ```
 
 3.  **Jalankan Kontainer dengan Docker Compose:**
