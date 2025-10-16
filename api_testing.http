@@ -1,0 +1,378 @@
+### OTP Login API Testing
+### Base URL: http://localhost:8080/api/v1
+
+@baseUrl = http://localhost:8080/api/v1
+### @userEmail = mcrdikk@gmail.com
+@userEmail = com.didikhariyanto@gmail.com
+@accessToken = eyJhbGciOiJIUzI1NiJ9.eyJ0eXBlIjoiYWNjZXNzIiwic3ViIjoiY29tLmRpZGlraGFyaXlhbnRvQGdtYWlsLmNvbSIsImlhdCI6MTc2MDYwNjYyMiwiZXhwIjoxNzYwNjA3NTIyfQ.UzRtWBZhiKne_qNN9DlGx7SmRU3Iw77W4-8UePtBEjU
+@refreshToken = eyJhbGciOiJIUzI1NiJ9.eyJ0eXBlIjoicmVmcmVzaCIsInN1YiI6ImNvbS5kaWRpa2hhcml5YW50b0BnbWFpbC5jb20iLCJpYXQiOjE3NjA2MDY2MjIsImV4cCI6MTc2MzE5ODYyMn0.H6c3RQYgqdXzcPs5cwQsVtXPrkZpfznnxMRusu81wOg
+
+### 1. Health Check
+GET {{baseUrl}}/actuator/health
+
+### 2. Request OTP
+POST {{baseUrl}}/auth/request-otp
+Content-Type: application/json
+
+{
+  "email": "{{userEmail}}"
+}
+
+> {%
+client.test("OTP Request Successful", function() {
+    client.assert(response.status === 200, "Response status is 200");
+    client.assert(response.body.message.includes("OTP has been sent"), "OTP sent message received");
+});
+%}
+
+### 3. Verify OTP (Login)
+# Note: Replace 123456 with the actual OTP received in email
+POST {{baseUrl}}/auth/verify-otp
+Content-Type: application/json
+
+{
+  "email": "{{userEmail}}",
+  "otp": "534519"
+}
+
+> {%
+client.test("OTP Verification Successful", function() {
+    client.assert(response.status === 200, "Response status is 200");
+    client.assert(response.body.accessToken, "Access token received");
+    client.assert(response.body.refreshToken, "Refresh token received");
+    client.assert(response.body.tokenType === "Bearer", "Token type is Bearer");
+    client.assert(response.body.expiresIn > 0, "Token expiration time valid");
+});
+client.global.set("accessToken", response.body.accessToken);
+client.global.set("refreshToken", response.body.refreshToken);
+%}
+
+### 4. Get User Profile (Protected)
+GET {{baseUrl}}/user/profile
+Authorization: Bearer {{accessToken}}
+
+> {%
+client.test("Get Profile Successful", function() {
+    client.assert(response.status === 200, "Response status is 200");
+    client.assert(response.body.email === userEmail, "User email matches");
+    client.assert(response.body.id, "User ID exists");
+    client.assert(response.body.name, "User name exists");
+    client.assert(response.body.isActive === true, "User is active");
+});
+%}
+
+### 5. Get User Stats (Protected)
+GET {{baseUrl}}/user/stats
+Authorization: Bearer {{accessToken}}
+
+> {%
+client.test("Get Stats Successful", function() {
+    client.assert(response.status === 200, "Response status is 200");
+    client.assert(response.body.email === userEmail, "Stats email matches");
+    client.assert(response.body.accountStatus, "Account status exists");
+    client.assert(typeof response.body.failedAttemptsLast24Hours === 'number', "Failed attempts count exists");
+});
+%}
+
+### 6. Update User Profile (Protected)
+PUT {{baseUrl}}/user/profile
+Authorization: Bearer {{accessToken}}
+Content-Type: application/json
+
+{
+  "name": "Updated Name"
+}
+
+> {%
+client.test("Update Profile Successful", function() {
+    client.assert(response.status === 200, "Response status is 200");
+    client.assert(response.body.message.includes("Profile updated"), "Profile updated message received");
+    client.assert(response.body.name === "Updated Name", "Name updated successfully");
+});
+%}
+
+### 7. Refresh Token
+POST {{baseUrl}}/auth/refresh-token
+Content-Type: application/json
+
+{
+  "refreshToken": "{{refreshToken}}"
+}
+
+> {%
+client.test("Refresh Token Successful", function() {
+    client.assert(response.status === 200, "Response status is 200");
+    client.assert(response.body.accessToken, "New access token received");
+    client.assert(response.body.tokenType === "Bearer", "Token type is Bearer");
+    client.global.set("accessToken", response.body.accessToken);
+});
+%}
+
+### 8. Logout
+POST {{baseUrl}}/auth/logout
+Authorization: Bearer {{accessToken}}
+
+> {%
+client.test("Logout Successful", function() {
+    client.assert(response.status === 200, "Response status is 200");
+    client.assert(response.body.message.includes("Logged out"), "Logout message received");
+});
+%}
+
+### 9. Try accessing protected endpoint after logout (Should fail)
+GET {{baseUrl}}/user/profile
+Authorization: Bearer {{accessToken}}
+
+> {%
+client.test("Access After Logout Fails", function() {
+    client.assert(response.status === 401 || response.status === 403, "Access denied after logout");
+});
+%}
+
+### 10. Invalid OTP Test (Should fail)
+POST {{baseUrl}}/auth/verify-otp
+Content-Type: application/json
+
+{
+  "email": "{{userEmail}}",
+  "otp": "999999"
+}
+
+> {%
+client.test("Invalid OTP Fails", function() {
+    client.assert(response.status === 401, "Response status is 401 for invalid OTP");
+    client.assert(response.body.message.includes("Invalid OTP"), "Invalid OTP message received");
+});
+%}
+
+### 11. Rate Limiting Test (Multiple OTP requests)
+POST {{baseUrl}}/auth/request-otp
+Content-Type: application/json
+
+{
+  "email": "test@example.com"
+}
+
+###
+POST {{baseUrl}}/auth/request-otp
+Content-Type: application/json
+
+{
+  "email": "test@example.com"
+}
+
+###
+POST {{baseUrl}}/auth/request-otp
+Content-Type: application/json
+
+{
+  "email": "test@example.com"
+}
+
+###
+POST {{baseUrl}}/auth/request-otp
+Content-Type: application/json
+
+{
+  "email": "test@example.com"
+}
+
+> {%
+client.test("Rate Limiting Works", function() {
+    client.assert(response.status === 429, "Rate limiting status is 429");
+    client.assert(response.body.message.includes("Too many requests"), "Rate limiting message received");
+});
+%}
+
+### 12. Invalid Email Test (Should fail)
+POST {{baseUrl}}/auth/request-otp
+Content-Type: application/json
+
+{
+  "email": "invalid-email"
+}
+
+> {%
+client.test("Invalid Email Fails", function() {
+    client.assert(response.status === 400, "Response status is 400 for invalid email");
+});
+%}
+
+### 13. Empty Request Test (Should fail)
+POST {{baseUrl}}/auth/request-otp
+Content-Type: application/json
+
+{}
+
+> {%
+client.test("Empty Request Fails", function() {
+    client.assert(response.status === 400, "Response status is 400 for empty request");
+});
+%}
+
+### 14. Access Protected Endpoint Without Token (Should fail)
+GET {{baseUrl}}/user/profile
+
+> {%
+client.test("Unauthorized Access Fails", function() {
+    client.assert(response.status === 401, "Response status is 401 for unauthorized access");
+});
+%}
+
+### 15. Invalid Token Test (Should fail)
+GET {{baseUrl}}/user/profile
+Authorization: Bearer invalid.token.here
+
+> {%
+client.test("Invalid Token Fails", function() {
+    client.assert(response.status === 401, "Response status is 401 for invalid token");
+});
+%}
+
+### 16. Expired OTP Test
+# Request OTP first
+POST {{baseUrl}}/auth/request-otp
+Content-Type: application/json
+
+{
+  "email": "expire@example.com"
+}
+
+###
+# Wait 5+ minutes then try to verify with an OTP (this will need manual timing)
+POST {{baseUrl}}/auth/verify-otp
+Content-Type: application/json
+
+{
+  "email": "expire@example.com",
+  "otp": "123456"
+}
+
+> {%
+client.test("Expired OTP Fails", function() {
+    client.assert(response.status === 401, "Response status is 401 for expired OTP");
+});
+%}
+
+### 17. Deactivate Account Test (Protected)
+POST {{baseUrl}}/user/deactivate
+Authorization: Bearer {{accessToken}}
+
+> {%
+client.test("Deactivate Account Successful", function() {
+    client.assert(response.status === 200, "Response status is 200");
+    client.assert(response.body.message.includes("deactivated"), "Account deactivated message received");
+});
+%}
+
+### 14. Email Not Found in Database Test (Should fail)
+POST {{baseUrl}}/auth/request-otp
+Content-Type: application/json
+
+{
+  "email": "nonexistent@example.com"
+}
+
+> {%
+client.test("Invalid Mail Fails", function() {
+    client.assert(response.status === 400, "Response status is 400 for invalid mail");
+    client.assert(response.body.message === "INVALID MAIL", "Error message should be 'INVALID MAIL'");
+});
+%}
+
+### 15. Email Rate Limiting Test (5 requests - should fail on 6th)
+POST {{baseUrl}}/auth/request-otp
+Content-Type: application/json
+
+{
+  "email": "test@example.com"
+}
+
+###
+POST {{baseUrl}}/auth/request-otp
+Content-Type: application/json
+
+{
+  "email": "test@example.com"
+}
+
+###
+POST {{baseUrl}}/auth/request-otp
+Content-Type: application/json
+
+{
+  "email": "test@example.com"
+}
+
+###
+POST {{baseUrl}}/auth/request-otp
+Content-Type: application/json
+
+{
+  "email": "test@example.com"
+}
+
+###
+POST {{baseUrl}}/auth/request-otp
+Content-Type: application/json
+
+{
+  "email": "test@example.com"
+}
+
+###
+POST {{baseUrl}}/auth/request-otp
+Content-Type: application/json
+
+{
+  "email": "test@example.com"
+}
+
+> {%
+client.test("6th request should be rate limited", function() {
+    client.assert(response.status === 429, "Response status is 429 for rate limited email");
+    client.assert(response.body.message.includes("Too many OTP attempts"), "Rate limiting message received");
+});
+%}
+
+### 16. Refresh Token - Invalid Token Test (Should fail)
+POST {{baseUrl}}/auth/refresh-token
+Content-Type: application/json
+
+{
+  "refreshToken": "invalid.refresh.token.here"
+}
+
+> {%
+client.test("Invalid Refresh Token Fails", function() {
+    client.assert(response.status === 401, "Response status is 401 for invalid refresh token");
+    client.assert(response.body.message.includes("Invalid or expired refresh token"), "Error message correct");
+});
+%}
+
+### 17. Refresh Token - Missing Token Test (Should fail)
+POST {{baseUrl}}/auth/refresh-token
+Content-Type: application/json
+
+{}
+
+> {%
+client.test("Missing Refresh Token Fails", function() {
+    client.assert(response.status === 400, "Response status is 400 for missing refresh token");
+    client.assert(response.body.message.includes("Refresh token is required"), "Error message correct");
+});
+%}
+
+###
+### Instructions for Testing:
+### 1. Make sure the application is running on localhost:8080
+### 2. Update @userEmail variable with your actual email
+### 3. Run the "Request OTP" request first
+### 4. Check your email for the OTP code
+### 5. Update the OTP in the "Verify OTP" request
+### 6. Execute the requests sequentially for a complete user flow
+### 7. For rate limiting tests, execute the requests quickly to trigger limits
+### 8. Test invalid emails - should return "INVALID MAIL" with status 400
+### 9. Test rate limiting - 5 requests per email per minute, 6th request gets 429
+### 10. Test refresh tokens - verify token rotation and error handling
+### 11. Access protected endpoints using the access token from login response
