@@ -70,6 +70,25 @@ public class UserService implements UserDetailsService {
         return userRepository.save(newUser);
     }
 
+    // Optimized method that combines exists check and creation in one transaction
+    @Transactional
+    public User createUserIfNotExists(String email, String name) {
+        // Try to find user first with a direct query
+        User existingUser = userRepository.findByEmail(email).orElse(null);
+        if (existingUser != null) {
+            return null; // User exists
+        }
+
+        // Create new user
+        User newUser = User.builder()
+                .email(email)
+                .name(name != null ? name : email.substring(0, email.indexOf('@')))
+                .isActive(true)
+                .build();
+
+        return userRepository.save(newUser);
+    }
+
     public User updateUser(Long userId, String name) {
         User user = userRepository.findById(userId)
                 .orElseThrow(() -> new IllegalArgumentException("User not found with id: " + userId));

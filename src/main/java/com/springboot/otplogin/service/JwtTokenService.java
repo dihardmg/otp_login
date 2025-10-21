@@ -14,6 +14,7 @@ import java.time.temporal.ChronoUnit;
 import java.util.Date;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.UUID;
 import java.util.function.Function;
 
 @Service
@@ -67,6 +68,7 @@ public class JwtTokenService {
     public String generateAccessToken(UserDetails userDetails) {
         Map<String, Object> claims = new HashMap<>();
         claims.put("type", "access");
+        claims.put("jti", generateJTI());
         return createToken(claims, userDetails.getUsername(),
                 Instant.now().plus(accessTokenExpirationMinutes, ChronoUnit.MINUTES));
     }
@@ -74,6 +76,7 @@ public class JwtTokenService {
     public String generateRefreshToken(UserDetails userDetails) {
         Map<String, Object> claims = new HashMap<>();
         claims.put("type", "refresh");
+        claims.put("jti", generateJTI());
         return createToken(claims, userDetails.getUsername(),
                 Instant.now().plus(refreshTokenExpirationDays, ChronoUnit.DAYS));
     }
@@ -81,6 +84,7 @@ public class JwtTokenService {
     public String generateAccessToken(String email) {
         Map<String, Object> claims = new HashMap<>();
         claims.put("type", "access");
+        claims.put("jti", generateJTI());
         return createToken(claims, email,
                 Instant.now().plus(accessTokenExpirationMinutes, ChronoUnit.MINUTES));
     }
@@ -88,6 +92,7 @@ public class JwtTokenService {
     public String generateRefreshToken(String email) {
         Map<String, Object> claims = new HashMap<>();
         claims.put("type", "refresh");
+        claims.put("jti", generateJTI());
         return createToken(claims, email,
                 Instant.now().plus(refreshTokenExpirationDays, ChronoUnit.DAYS));
     }
@@ -95,6 +100,7 @@ public class JwtTokenService {
     public String generateToken(String email) {
         Map<String, Object> claims = new HashMap<>();
         claims.put("type", "access");
+        claims.put("jti", generateJTI());
         return createToken(claims, email,
                 Instant.now().plus(accessTokenExpirationMinutes, ChronoUnit.MINUTES));
     }
@@ -165,5 +171,9 @@ public class JwtTokenService {
             log.error("Failed to refresh token: {}", e.getMessage());
             throw new IllegalArgumentException("Invalid refresh token", e);
         }
+    }
+
+    private String generateJTI() {
+        return UUID.randomUUID().toString();
     }
 }

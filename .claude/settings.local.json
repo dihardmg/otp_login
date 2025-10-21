@@ -1,0 +1,17 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(mvn compile:*)",
+      "Bash(./mvnw:*)",
+      "Bash(docker-compose down:*)",
+      "Bash(curl:*)",
+      "Bash(docker-compose ps:*)",
+      "Bash(docker-compose logs:*)",
+      "Bash(docker-compose:*)",
+      "Bash(taskkill:*)",
+      "Bash(powershell \"Stop-Process -Id 5700 -Force\")"
+    ],
+    "deny": [],
+    "ask": []
+  }
+}

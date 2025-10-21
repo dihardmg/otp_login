@@ -2,6 +2,7 @@ package com.springboot.otplogin.security;
 
 import com.springboot.otplogin.service.JwtTokenService;
 import com.springboot.otplogin.service.UserService;
+import com.springboot.otplogin.service.TokenBlacklistService;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
@@ -24,6 +25,7 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
 
     private final JwtTokenService jwtTokenService;
     private final UserService userService;
+    private final TokenBlacklistService tokenBlacklistService;
 
     @Override
     protected void doFilterInternal(
@@ -35,6 +37,12 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
             String jwt = getJwtFromRequest(request);
 
             if (StringUtils.hasText(jwt) && jwtTokenService.isAccessToken(jwt)) {
+                if (tokenBlacklistService.isTokenBlacklisted(jwt)) {
+                    log.warn("Attempted to use blacklisted token");
+                    response.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
+                    return;
+                }
+
                 String email = jwtTokenService.extractUsername(jwt);
 
                 if (email != null && SecurityContextHolder.getContext().getAuthentication() == null) {

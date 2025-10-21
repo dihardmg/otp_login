@@ -1,14 +1,248 @@
 ### OTP Login API Testing
-### Base URL: http://localhost:8080/api/v1
+### Base URL: http://localhost:8081/api/v1
 
-@baseUrl = http://localhost:8082/api/v1
-@userEmail = lareosenglab@gmail.com
-### @userEmail = com.didikhariyanto@gmail.com
-@accessToken = eyJhbGciOiJIUzI1NiJ9.eyJ0eXBlIjoiYWNjZXNzIiwic3ViIjoiY29tLmRpZGlraGFyaXlhbnRvQGdtYWlsLmNvbSIsImlhdCI6MTc2MDYwNjYyMiwiZXhwIjoxNzYwNjA3NTIyfQ.UzRtWBZhiKne_qNN9DlGx7SmRU3Iw77W4-8UePtBEjU
-@refreshToken = eyJhbGciOiJIUzI1NiJ9.eyJ0eXBlIjoicmVmcmVzaCIsInN1YiI6ImNvbS5kaWRpa2hhcml5YW50b0BnbWFpbC5jb20iLCJpYXQiOjE3NjA2MDY2MjIsImV4cCI6MTc2MzE5ODYyMn0.H6c3RQYgqdXzcPs5cwQsVtXPrkZpfznnxMRusu81wOg
+@baseUrl = http://localhost:8081/api/v1
+@userEmail = mcrdik@gmail.com
+### @userEmail = lareosenglab@gmail.com
+@accessToken =eyJhbGciOiJIUzI1NiJ9.eyJ0eXBlIjoiYWNjZXNzIiwianRpIjoiMTNhOWEzY2ItN2QyNy00ZTVkLTgzZWEtYWNhZTBjN2FhN2NmIiwic3ViIjoibGFyZW9zZW5nbGFiQGdtYWlsLmNvbSIsImlhdCI6MTc2MTA1NTI3MywiZXhwIjoxNzYxMDU2MTcyfQ.4DIfReHcnIfRfLcXIus0G3rwnu85z-VSNaNmvZZblZY
+
+@refreshToken = eyJhbGciOiJIUzI1NiJ9.eyJ0eXBlIjoicmVmcmVzaCIsImp0aSI6ImU1ZmNlZjYyLTgxMjEtNDY5MS05YWU1LTJjYzliY2VkZTMzNiIsInN1YiI6ImxhcmVvc2VuZ2xhYkBnbWFpbC5jb20iLCJpYXQiOjE3NjEwNTUyNzMsImV4cCI6MTc2MzY0NzI3M30.X5h7NxHQAOBbtrPTYVQlso64znmyeLz4NMwXUobtn_s
 
 ### 1. Health Check
 GET {{baseUrl}}/actuator/health
+
+### ==================== SIGNUP ENDPOINTS ====================
+
+### 2. Create New User Signup - Success Case
+POST {{baseUrl}}/auth/signup
+Content-Type: application/json
+
+{
+  "name": "didik h",
+  "email": "mcrdik@gmail.com"
+}
+
+> {%
+client.test("User Signup Successful", function() {
+    client.assert(response.status === 201, "Response status is 201 for successful signup");
+    client.assert(response.body.message.includes("User registered successfully"), "Success message received");
+    client.assert(response.body.email, "Email returned in response");
+    client.assert(response.body.name, "Name returned in response");
+    client.assert(response.body.userId, "User ID returned in response");
+});
+%}
+
+### 3. Create New User Signup - Invalid Email Format
+POST {{baseUrl}}/auth/signup
+Content-Type: application/json
+
+{
+  "name": "Jane Smith",
+  "email": "invalid-email"
+}
+
+> {%
+client.test("Invalid Email Signup Fails", function() {
+    client.assert(response.status === 400, "Response status is 400 for invalid email");
+    client.assert(response.body.message.includes("Invalid email format"), "Invalid email error message");
+});
+%}
+
+### 4. Create New User Signup - Missing Name
+POST {{baseUrl}}/auth/signup
+Content-Type: application/json
+
+{
+  "email": "test@example.com"
+}
+
+> {%
+client.test("Missing Name Signup Fails", function() {
+    client.assert(response.status === 400, "Response status is 400 for missing name");
+    client.assert(response.body.message.includes("Name is required"), "Name required error message");
+});
+%}
+
+### 5. Create New User Signup - Missing Email
+POST {{baseUrl}}/auth/signup
+Content-Type: application/json
+
+{
+  "name": "Test User"
+}
+
+> {%
+client.test("Missing Email Signup Fails", function() {
+    client.assert(response.status === 400, "Response status is 400 for missing email");
+    client.assert(response.body.message.includes("Email is required"), "Email required error message");
+});
+%}
+
+### 6. Create New User Signup - Name Too Short
+POST {{baseUrl}}/auth/signup
+Content-Type: application/json
+
+{
+  "name": "A",
+  "email": "test@example.com"
+}
+
+> {%
+client.test("Name Too Short Signup Fails", function() {
+    client.assert(response.status === 400, "Response status is 400 for name too short");
+    client.assert(response.body.message.includes("Name must be between 2 and 50 characters"), "Name length error message");
+});
+%}
+
+### 7. Create New User Signup - Name Too Long
+POST {{baseUrl}}/auth/signup
+Content-Type: application/json
+
+{
+  "name": "This is a very long name that exceeds the fifty character limit for user names",
+  "email": "test@example.com"
+}
+
+> {%
+client.test("Name Too Long Signup Fails", function() {
+    client.assert(response.status === 400, "Response status is 400 for name too long");
+    client.assert(response.body.message.includes("Name must be between 2 and 50 characters"), "Name length error message");
+});
+%}
+
+### 8. Create New User Signup - Empty Payload
+POST {{baseUrl}}/auth/signup
+Content-Type: application/json
+
+{}
+
+> {%
+client.test("Empty Payload Signup Fails", function() {
+    client.assert(response.status === 400, "Response status is 400 for empty payload");
+});
+%}
+
+### 9. Create New User Signup - Test Case for Existing User (Run after successful signup)
+POST {{baseUrl}}/auth/signup
+Content-Type: application/json
+
+{
+  "name": "Another John",
+  "email": "john.doe.new@example.com"
+}
+
+> {%
+client.test("Duplicate Email Signup Fails", function() {
+    client.assert(response.status === 409, "Response status is 409 for duplicate email");
+    client.assert(response.body.message.includes("User with this email already exists"), "Duplicate email error message");
+});
+%}
+
+### 10. Create Multiple Users for Testing - Alice
+POST {{baseUrl}}/auth/signup
+Content-Type: application/json
+
+{
+  "name": "Alice Johnson",
+  "email": "alice.j@example.com"
+}
+
+> {%
+client.test("Alice Signup Successful", function() {
+    client.assert(response.status === 201, "Response status is 201 for Alice signup");
+});
+%}
+
+### 11. Create Multiple Users for Testing - Bob
+POST {{baseUrl}}/auth/signup
+Content-Type: application/json
+
+{
+  "name": "Bob Wilson",
+  "email": "bob.wilson@example.com"
+}
+
+> {%
+client.test("Bob Signup Successful", function() {
+    client.assert(response.status === 201, "Response status is 201 for Bob signup");
+});
+%}
+
+### 12. Signup with Special Characters in Name
+POST {{baseUrl}}/auth/signup
+Content-Type: application/json
+
+{
+  "name": "José María García",
+  "email": "jose.maria@example.com"
+}
+
+> {%
+client.test("Special Characters Name Signup", function() {
+    client.assert(response.status === 201, "Response status is 201 for special characters");
+});
+%}
+
+### 13. Signup Rate Limiting Test - Multiple Quick Requests (Should trigger rate limit)
+POST {{baseUrl}}/auth/signup
+Content-Type: application/json
+
+{
+  "name": "Rate Limit Test 1",
+  "email": "ratelimit1@example.com"
+}
+
+###
+POST {{baseUrl}}/auth/signup
+Content-Type: application/json
+
+{
+  "name": "Rate Limit Test 2",
+  "email": "ratelimit2@example.com"
+}
+
+###
+POST {{baseUrl}}/auth/signup
+Content-Type: application/json
+
+{
+  "name": "Rate Limit Test 3",
+  "email": "ratelimit3@example.com"
+}
+
+###
+POST {{baseUrl}}/auth/signup
+Content-Type: application/json
+
+{
+  "name": "Rate Limit Test 4",
+  "email": "ratelimit4@example.com"
+}
+
+###
+POST {{baseUrl}}/auth/signup
+Content-Type: application/json
+
+{
+  "name": "Rate Limit Test 5",
+  "email": "ratelimit9@example.com"
+}
+
+###
+POST {{baseUrl}}/auth/signup
+Content-Type: application/json
+
+{
+  "name": "lareosenglab",
+  "email": "lareosenglab@gmail.com"
+}
+
+> {%
+client.test("Signup Rate Limiting Works", function() {
+    client.assert(response.status === 429, "Response status is 429 for rate limited signup");
+    client.assert(response.body.message.includes("Too many requests"), "Rate limiting message received");
+});
+%}
 
 ### 2. Request OTP
 POST {{baseUrl}}/auth/request-otp
@@ -32,7 +266,7 @@ Content-Type: application/json
 
 {
   "email": "{{userEmail}}",
-  "otp": "192494"
+  "otp": "317011"
 }
 
 > {%
@@ -365,14 +599,36 @@ client.test("Missing Refresh Token Fails", function() {
 
 ###
 ### Instructions for Testing:
-### 1. Make sure the application is running on localhost:8080
-### 2. Update @userEmail variable with your actual email
-### 3. Run the "Request OTP" request first
-### 4. Check your email for the OTP code
-### 5. Update the OTP in the "Verify OTP" request
-### 6. Execute the requests sequentially for a complete user flow
-### 7. For rate limiting tests, execute the requests quickly to trigger limits
-### 8. Test invalid emails - should return "INVALID MAIL" with status 400
-### 9. Test rate limiting - 5 requests per email per minute, 6th request gets 429
-### 10. Test refresh tokens - verify token rotation and error handling
-### 11. Access protected endpoints using the access token from login response
+### 1. Make sure the application is running on localhost:8082 (as per @baseUrl configuration)
+### 2. For signup testing, use unique email addresses to avoid conflicts
+### 3. Run the signup tests first to create users:
+###    - Request #2: Success case (creates John Doe user)
+###    - Requests #3-8: Validation error cases (should return 400)
+###    - Request #9: Duplicate email test (run after #2, should return 409)
+###    - Requests #10-12: Additional user creation tests
+###    - Request #13: Rate limiting test (executes 6 quick requests, 6th should return 429)
+### 4. For existing user flow, update @userEmail variable with your actual email
+### 5. Run the "Request OTP" request for existing users
+### 6. Check your email for the OTP code
+### 7. Update the OTP in the "Verify OTP" request
+### 8. Execute the requests sequentially for a complete user flow
+### 9. For rate limiting tests, execute the requests quickly to trigger limits
+### 10. Test invalid emails - should return "INVALID MAIL" with status 400
+### 11. Test rate limiting - 5 requests per email per minute, 6th request gets 429
+### 12. Test refresh tokens - verify token rotation and error handling
+### 13. Access protected endpoints using the access token from login response
+###
+### NEW SIGNUP ENDPOINT FEATURES:
+### - POST /auth/signup creates new users with name and email
+### - Validates input (name: 2-50 chars, email: valid format)
+### - Rate limiting: 5 requests per IP per minute, 5 requests per email per minute
+### - Duplicate prevention: Returns 409 Conflict if email already exists
+### - Welcome email: Automatically sends welcome message to new users
+### - Success response: Returns user details with 201 Created status
+###
+### SIGNUP TESTING SEQUENCE:
+### 1. Test #2: Successful signup (creates user)
+### 2. Test #3-8: Input validation tests (should fail appropriately)
+### 3. Test #9: Duplicate email test (run after #2)
+### 4. Test #10-12: Multiple user creation for load testing
+### 5. Test #13: Rate limiting verification (quick consecutive requests)

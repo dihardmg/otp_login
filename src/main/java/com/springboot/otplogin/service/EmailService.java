@@ -192,4 +192,26 @@ public class EmailService {
             log.error("Failed to send welcome email to {}: {}", to, e.getMessage());
         }
     }
+
+    // Optimized async method with minimal logging for high performance
+    @Async
+    public void sendWelcomeEmailAsync(String to, String name) {
+        try {
+            SimpleMailMessage message = new SimpleMailMessage();
+            message.setFrom(fromEmail);
+            message.setTo(to);
+            message.setSubject("Welcome to OTP Login System");
+
+            String body = String.format("Hello %s,\n\nWelcome to OTP Login System! Your account has been successfully created.\n\nYou can now login using our passwordless authentication system with OTP verification.\n\nBest regards,\nOTP Login System",
+                name != null ? name : "User");
+
+            message.setText(body);
+            mailSender.send(message);
+
+            // Minimal logging - only log errors
+        } catch (Exception e) {
+            // Silent fail for production performance - debug only
+            log.debug("Email queuing failed for {}: {}", to, e.getMessage());
+        }
+    }
 }

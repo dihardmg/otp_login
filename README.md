@@ -94,6 +94,10 @@ Aplikasi berjalan sebagai *microservice* yang diorkestrasi oleh Docker Compose d
     ```bash
     docker-compose up --build -d
     ```
+- cek log terminal
+    ```
+    docker logs -f otp_login-app-1
+    ```
 
     Perintah ini akan membangun *image* Spring Boot dan menjalankan semua kontainer (app, db, redis) di *background*.
 
@@ -127,9 +131,6 @@ spring.data.redis.host=localhost
 spring.data.redis.port=6379
 
 # Email Configuration (SendGrid)
-spring.mail.host=smtp.sendgrid.net
-spring.mail.port=587
-spring.mail.username=apikey
 spring.mail.password=your_sendgrid_api_key
 
 # JWT Configuration

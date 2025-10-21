@@ -3,11 +3,14 @@ package com.springboot.otplogin.controller;
 import com.springboot.otplogin.dto.AuthResponseDto;
 import com.springboot.otplogin.dto.OtpRequestDto;
 import com.springboot.otplogin.dto.OtpVerificationDto;
+import com.springboot.otplogin.dto.SignupRequestDto;
 import com.springboot.otplogin.entity.User;
 import com.springboot.otplogin.service.EmailService;
 import com.springboot.otplogin.service.JwtTokenService;
 import com.springboot.otplogin.service.OtpService;
 import com.springboot.otplogin.service.UserService;
+import com.springboot.otplogin.service.TokenBlacklistService;
+import com.springboot.otplogin.service.LogoutAuditService;
 import io.github.bucket4j.Bandwidth;
 import io.github.bucket4j.Bucket;
 import io.github.bucket4j.Refill;
@@ -36,6 +39,8 @@ public class AuthController {
     private final OtpService otpService;
     private final EmailService emailService;
     private final JwtTokenService jwtTokenService;
+    private final TokenBlacklistService tokenBlacklistService;
+    private final LogoutAuditService logoutAuditService;
 
     private final Map<String, Bucket> ipBucketMap = new ConcurrentHashMap<>();
     private final Map<String, Bucket> emailBucketMap = new ConcurrentHashMap<>();
@@ -204,21 +209,59 @@ public class AuthController {
         }
     }
 
-    @PostMapping("/logout")
-    public ResponseEntity<Map<String, String>> logout(HttpServletRequest request) {
-        String authHeader = request.getHeader("Authorization");
+    @PostMapping("/signup")
+    public ResponseEntity<Map<String, String>> signup(
+            @Valid @RequestBody SignupRequestDto signupRequestDto,
+            HttpServletRequest request) {
 
-        if (authHeader != null && authHeader.startsWith("Bearer ")) {
-            String token = authHeader.substring(7);
+        String email = signupRequestDto.getEmail();
+        String name = signupRequestDto.getName();
+        String clientIp = getClientIpAddress(request);
 
-            if (jwtTokenService.isAccessToken(token)) {
-                String email = jwtTokenService.extractUsername(token);
-                otpService.clearOtp(email);
-                log.info("User logged out: {}", email);
-            }
+        // Quick rate limiting check
+        if (!getBucketForIp(clientIp).tryConsume(1) || !getBucketForEmail(email).tryConsume(1)) {
+            return ResponseEntity.status(HttpStatus.TOO_MANY_REQUESTS)
+                    .body(Map.of("message", "Too many requests. Please try again later."));
         }
 
-        return ResponseEntity.ok(Map.of("message", "Logged out successfully"));
+        try {
+            // Check if user exists and create in one operation to minimize DB calls
+            User newUser = userService.createUserIfNotExists(email, name);
+            if (newUser == null) {
+                return ResponseEntity.status(HttpStatus.CONFLICT)
+                        .body(Map.of("message", "User with this email already exists"));
+            }
+
+            // Send email asynchronously - don't block response
+            try {
+                emailService.sendWelcomeEmailAsync(email, name);
+            } catch (Exception e) {
+                // Log only if needed for debugging
+                log.debug("Welcome email sending failed for {}: {}", email, e.getMessage());
+            }
+
+            // Minimal logging for performance
+            if (log.isDebugEnabled()) {
+                log.debug("New user created - Email: {}, IP: {}", email, clientIp);
+            }
+
+            // Pre-built response object for faster serialization
+            return ResponseEntity.status(HttpStatus.CREATED)
+                    .body(Map.of(
+                            "message", "User registered successfully",
+                            "email", email,
+                            "name", name,
+                            "userId", String.valueOf(newUser.getId())
+                    ));
+
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                    .body(Map.of("message", e.getMessage()));
+        } catch (Exception e) {
+            log.error("Error during user signup for {}: {}", email, e.getMessage());
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .body(Map.of("message", "Registration failed. Please try again."));
+        }
     }
 
     private String getClientIpAddress(HttpServletRequest request) {
@@ -236,7 +279,7 @@ public class AuthController {
     }
 
     private Bucket getBucketForIp(String ip) {
-        return ipBucketMap.computeIfAbsent(ip, k -> {
+        return ipBucketMap.computeIfAbsent(ip, ignored -> {
             Bandwidth limit = Bandwidth.classic(10, Refill.intervally(10, Duration.ofMinutes(1)));
             return Bucket.builder()
                     .addLimit(limit)
@@ -245,7 +288,7 @@ public class AuthController {
     }
 
     private Bucket getBucketForEmail(String email) {
-        return emailBucketMap.computeIfAbsent(email, k -> {
+        return emailBucketMap.computeIfAbsent(email, ignored -> {
             // Limit to 5 requests per minute per email
             Bandwidth limit = Bandwidth.classic(5, Refill.intervally(5, Duration.ofMinutes(1)));
             return Bucket.builder()

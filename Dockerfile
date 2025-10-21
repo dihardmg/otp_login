@@ -19,7 +19,7 @@ COPY src ./src
 RUN ./mvnw clean package -DskipTests -B
 
 # Expose port
-EXPOSE 8080
+EXPOSE 8081
 
 # Run the application
 ENTRYPOINT ["java", "-jar", "target/OTP-Login-0.0.1-SNAPSHOT.jar"]

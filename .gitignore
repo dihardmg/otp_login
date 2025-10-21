@@ -34,3 +34,8 @@ build/
 
 # Mengabaikan semua file yang berakhiran .Identifier
 *.Identifier
+
+# Environment variables
+.env
+.env.local
+.env.production
