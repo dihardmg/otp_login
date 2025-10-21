@@ -40,6 +40,14 @@ public class UserService implements UserDetailsService {
         return userRepository.existsByEmail(email);
     }
 
+    public boolean userExistsAndIsActive(String email) {
+        return userRepository.findByEmailAndIsActive(email).isPresent();
+    }
+
+    public Optional<User> findUserByEmail(String email) {
+        return userRepository.findByEmail(email);
+    }
+
     public User getOrCreateUser(String email, String name) {
         Optional<User> existingUser = userRepository.findByEmail(email);
 

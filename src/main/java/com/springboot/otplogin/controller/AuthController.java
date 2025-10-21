@@ -18,6 +18,7 @@ import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import java.util.Optional;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.validation.annotation.Validated;
@@ -71,8 +72,15 @@ public class AuthController {
         }
 
         try {
-            // Check if user exists in database
-            if (!userService.userExists(email)) {
+            // Check if user exists and is active in database
+            if (!userService.userExistsAndIsActive(email)) {
+                // Check if user exists but is inactive
+                Optional<User> userOpt = userService.findUserByEmail(email);
+                if (userOpt.isPresent() && !userOpt.get().getIsActive()) {
+                    return ResponseEntity.status(HttpStatus.FORBIDDEN)
+                            .body(Map.of("message", "User account is inactive. Please contact support."));
+                }
+                // User doesn't exist
                 return ResponseEntity.status(HttpStatus.BAD_REQUEST)
                         .body(Map.of("message", "INVALID MAIL"));
             }

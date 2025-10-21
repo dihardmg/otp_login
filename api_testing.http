@@ -266,7 +266,7 @@ Content-Type: application/json
 
 {
   "email": "{{userEmail}}",
-  "otp": "317011"
+  "otp": "456387"
 }
 
 > {%
