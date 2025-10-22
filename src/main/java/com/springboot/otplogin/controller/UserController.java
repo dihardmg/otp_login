@@ -1,5 +1,6 @@
 package com.springboot.otplogin.controller;
 
+import com.springboot.otplogin.dto.ApiResponse;
 import com.springboot.otplogin.dto.AuthResponseDto;
 import com.springboot.otplogin.entity.User;
 import com.springboot.otplogin.security.CustomUserDetails;
@@ -27,22 +28,22 @@ public class UserController {
     private final UserService userService;
 
     @GetMapping("/profile")
-    public ResponseEntity<Map<String, Object>> getUserProfile(
+    public ResponseEntity<ApiResponse<Map<String, Object>>> getUserProfile(
             @AuthenticationPrincipal CustomUserDetails userDetails) {
 
         User user = userDetails.getUser();
 
         Map<String, Object> profile = new HashMap<>();
-        profile.put("id", user.getId());
-        profile.put("email", user.getEmail());
         profile.put("name", user.getName());
+        profile.put("id", user.getId());
         profile.put("isActive", user.getIsActive());
+        profile.put("email", user.getEmail());
         profile.put("createdAt", user.getCreatedAt());
         profile.put("updatedAt", user.getUpdatedAt());
 
         log.info("Profile accessed for user: {}", user.getEmail());
 
-        return ResponseEntity.ok(profile);
+        return ResponseEntity.ok(ApiResponse.success(profile));
     }
 
     @PutMapping("/profile")

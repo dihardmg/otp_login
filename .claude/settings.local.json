@@ -9,7 +9,9 @@
       "Bash(docker-compose logs:*)",
       "Bash(docker-compose:*)",
       "Bash(taskkill:*)",
-      "Bash(powershell \"Stop-Process -Id 5700 -Force\")"
+      "Bash(powershell \"Stop-Process -Id 5700 -Force\")",
+      "Bash(netstat:*)",
+      "Bash(findstr:*)"
     ],
     "deny": [],
     "ask": []

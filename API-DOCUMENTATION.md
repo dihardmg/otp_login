@@ -59,10 +59,38 @@ Creates a new user account with email and name validation.
 | 409 | Conflict | Email already exists |
 | 429 | Too Many Requests | Rate limit exceeded |
 
-**Example Error Response:**
+**Validation Error Response (400):**
 ```json
 {
-  "message": "Name must be between 2 and 50 characters"
+  "type": "https://example.com/problems/validation-error",
+  "title": "Validation Failed",
+  "status": 400,
+  "detail": "Your request parameters didn't validate correctly.",
+  "errors": {
+    "name": [
+      "must not be null",
+      "must not be blank"
+    ],
+    "email": [
+      "must not be null",
+      "must not be blank",
+      "Invalid email format"
+    ]
+  },
+  "timestamp": "2025-10-22T05:00:08Z"
+}
+```
+
+**Rate Limit Error Response (429):**
+```json
+{
+  "type": "https://example.com/problems/rate-limit-exceeded",
+  "title": "Too Many Requests",
+  "status": 429,
+  "detail": "Email rate limit exceeded. Too many OTP requests for this email address.",
+  "instance": "/api/v1/auth/signup",
+  "retryAfter": 60,
+  "timestamp": "2025-10-22T05:00:08Z"
 }
 ```
 
@@ -212,12 +240,16 @@ Authorization: Bearer <access_token>
 **Success Response (200 OK):**
 ```json
 {
-  "id": 1,
-  "email": "user@example.com",
-  "name": "John Doe",
-  "isActive": true,
-  "createdAt": "2025-01-01T10:00:00Z",
-  "updatedAt": "2025-01-01T10:00:00Z"
+  "code": 200,
+  "status": "OK",
+  "data": {
+    "name": "John Doe",
+    "id": 1,
+    "isActive": true,
+    "email": "user@example.com",
+    "createdAt": "2025-01-01T10:00:00Z",
+    "updatedAt": "2025-01-01T10:00:00Z"
+  }
 }
 ```
 
@@ -516,7 +548,7 @@ curl -X POST http://localhost:8081/api/v1/auth/logout \
 
 ### Error Handling Examples
 
-#### Invalid Email Format
+#### Invalid Email Format (Updated)
 ```bash
 curl -X POST http://localhost:8081/api/v1/auth/signup \
   -H "Content-Type: application/json" \
@@ -527,7 +559,33 @@ curl -X POST http://localhost:8081/api/v1/auth/signup \
 
 # Response: 400 Bad Request
 {
-  "message": "Invalid email format"
+  "type": "https://example.com/problems/validation-error",
+  "title": "Validation Failed",
+  "status": 400,
+  "detail": "Your request parameters didn't validate correctly.",
+  "errors": {
+    "email": ["Invalid email format"]
+  },
+  "timestamp": "2025-10-22T05:36:05Z"
+}
+```
+
+#### Rate Limiting (NEW!)
+```bash
+# Test rate limiting with invalid email (6+ requests)
+curl -X POST http://localhost:8081/api/v1/auth/request-otp \
+  -H "Content-Type: application/json" \
+  -d '{"email":"invalid-mail"}'
+
+# Response: 429 Too Many Requests (6th request)
+{
+  "type": "https://example.com/problems/rate-limit-exceeded",
+  "title": "Too Many Requests",
+  "status": 429,
+  "detail": "Email rate limit exceeded. Too many OTP requests for this email address.",
+  "instance": "/api/v1/auth/request-otp",
+  "retryAfter": 60,
+  "timestamp": "2025-10-22T05:36:10Z"
 }
 ```
 
@@ -589,13 +647,36 @@ curl -X GET http://localhost:8081/api/v1/user/profile \
 
 ## 🛡️ Security Features
 
-### Rate Limiting
+### Enhanced Rate Limiting
 
-| Endpoint | IP Rate Limit | Email Rate Limit |
-|----------|---------------|------------------|
-| `/auth/signup` | 10 req/min/IP | 5 req/min/email |
-| `/auth/request-otp` | 10 req/min/IP | 5 req/min/email |
-| `/auth/verify-otp` | No IP limit | 3 attempts/15 min/email |
+| Endpoint | IP Rate Limit | Email Rate Limit | Special Protection |
+|----------|---------------|------------------|-------------------|
+| `/auth/signup` | 10 req/min/IP | 5 req/min/email | Pre-validation rate limiting |
+| `/auth/request-otp` | 10 req/min/IP | 5 req/min/email | **Pre-validation rate limiting** |
+| `/auth/verify-otp` | No IP limit | 3 attempts/15 min/email | Account lock protection |
+
+#### **Rate Limiting Implementation Features:**
+
+1. **Pre-Validation Rate Limiting**: Rate limiting occurs BEFORE input validation
+2. **Invalid Email Protection**: Even invalid email formats are rate limited (5 req/min)
+3. **Multi-Layer Protection**:
+   - Filter-level rate limiting (runs before validation)
+   - IP-based rate limiting (10 requests per minute)
+   - Email-based rate limiting (5 requests per minute)
+   - Account-based rate limiting (after authentication)
+
+#### **Rate Limiting Headers:**
+```http
+Retry-After: 60
+X-RateLimit-Limit: 5
+X-RateLimit-Remaining: 0
+X-RateLimit-Reset: 1640995200
+```
+
+#### **Rate Limiting Behavior:**
+- **Request 1-5**: Returns appropriate error (400, 403, etc.)
+- **Request 6+**: Returns 429 Too Many Requests with detailed error structure
+- **Applies to ALL email addresses** (valid or invalid format)
 
 ### Account Locking
 
@@ -626,48 +707,102 @@ All inputs are validated using Jakarta Bean Validation:
 
 ---
 
-## 📊 Rate Limiting Details
+## 📊 Enhanced Rate Limiting Implementation
 
-### Implementation
+### Architecture Overview
 
-Rate limiting is implemented using **Bucket4j** with the following configurations:
+Rate limiting is implemented using a **multi-layer approach** with **custom filter** that runs before validation:
 
 ```java
-// IP-based rate limiting
-Bandwidth ipLimit = Bandwidth.classic(10, Refill.intervally(10, Duration.ofMinutes(1)));
-
-// Email-based rate limiting
-Bandwidth emailLimit = Bandwidth.classic(5, Refill.intervally(5, Duration.ofMinutes(1)));
+// Custom Filter Implementation
+@Component
+public class RateLimitFilter implements Filter {
+    // Pre-validation rate limiting
+    // Extracts email from request body before validation
+    // Applies rate limits to ALL requests (valid or invalid)
+}
 ```
+
+### Key Implementation Features
+
+1. **Pre-Validation Filter**: Runs BEFORE Spring's `@Valid` annotation
+2. **Request Body Parsing**: Extracts email from JSON for rate limiting
+3. **Bucket4j Integration**: Token bucket algorithm for rate limiting
+4. **Standard REST Headers**: Follows RFC 7807 and HTTP standards
 
 ### Rate Limiting Headers
 
 When rate limits are exceeded, the following headers are included:
 
-```
-X-RateLimit-Limit: 10
+```http
+Retry-After: 60
+X-RateLimit-Limit: 5
 X-RateLimit-Remaining: 0
 X-RateLimit-Reset: 1640995200
 ```
 
-### Testing Rate Limiting
+### Testing Enhanced Rate Limiting
 
 ```bash
+# Test Invalid Email Rate Limiting (NEW!)
+for i in {1..7}; do
+  curl -X POST http://localhost:8081/api/v1/auth/request-otp \
+    -H "Content-Type: application/json" \
+    -d '{"email":"invalid-mail"}' \
+    -w "Status: %{http_code}\n" \
+    -o /dev/null -s
+done
+
+# Expected behavior:
+# Request 1-5: 400 Bad Request (validation error)
+# Request 6+: 429 Too Many Requests (rate limited)
+
 # Test IP rate limiting (10 requests)
 for i in {1..12}; do
   curl -X POST http://localhost:8081/api/v1/auth/signup \
     -H "Content-Type: application/json" \
     -d '{"name":"Test User","email":"test' + $i + '@example.com"}' \
-    -w "Status: %{http_code}\n"
+    -w "Status: %{http_code}\n" \
+    -o /dev/null -s
 done
 
-# Test email rate limiting (5 requests)
+# Test Valid Email Rate Limiting (5 requests)
 for i in {1..7}; do
   curl -X POST http://localhost:8081/api/v1/auth/request-otp \
     -H "Content-Type: application/json" \
     -d '{"email":"ratelimit@example.com"}' \
-    -w "Status: %{http_code}\n"
+    -w "Status: %{http_code}\n" \
+    -o /dev/null -s
 done
+```
+
+### Response Examples
+
+**Invalid Email (Request 1-5):**
+```json
+{
+  "type": "https://example.com/problems/validation-error",
+  "title": "Validation Failed",
+  "status": 400,
+  "detail": "Your request parameters didn't validate correctly.",
+  "errors": {
+    "email": ["Invalid email format"]
+  },
+  "timestamp": "2025-10-22T05:36:05Z"
+}
+```
+
+**Rate Limited (Request 6+):**
+```json
+{
+  "type": "https://example.com/problems/rate-limit-exceeded",
+  "title": "Too Many Requests",
+  "status": 429,
+  "detail": "Email rate limit exceeded. Too many OTP requests for this email address.",
+  "instance": "/api/v1/auth/request-otp",
+  "retryAfter": 60,
+  "timestamp": "2025-10-22T05:36:10Z"
+}
 ```
 
 ---
@@ -1174,7 +1309,16 @@ except Exception as e:
 
 ## 📝 Changelog
 
-### Version 1.1.0 (Current)
+### Version 1.2.0 (Current) - October 22, 2025
+- ✅ **Enhanced Rate Limiting**: Pre-validation rate limiting filter
+- ✅ **Invalid Email Protection**: Rate limiting applies to ALL email formats
+- ✅ **Structured Error Responses**: RFC 7807 compliant error format
+- ✅ **Standardized Response Structure**: Consistent API response format
+- ✅ **Anti-Brute Force Protection**: Multi-layer security against attacks
+- ✅ **REST API Best Practices**: Standard headers and status codes
+- ✅ **User Profile Response**: Updated to structured format with data wrapper
+
+### Version 1.1.0
 - ✅ Enhanced user validation (active/inactive status)
 - ✅ Improved error messages for inactive accounts
 - ✅ HTTP status code optimization
@@ -1199,6 +1343,6 @@ except Exception as e:
 
 ---
 
-**Last Updated:** January 21, 2025
+**Last Updated:** October 22, 2025
 **API Version:** v1
-**Documentation Version:** 1.1.0
+**Documentation Version:** 1.2.0

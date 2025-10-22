@@ -4,6 +4,7 @@ import com.springboot.otplogin.dto.AuthResponseDto;
 import com.springboot.otplogin.dto.OtpRequestDto;
 import com.springboot.otplogin.dto.OtpVerificationDto;
 import com.springboot.otplogin.dto.SignupRequestDto;
+import com.springboot.otplogin.exception.RateLimitExceededException;
 import com.springboot.otplogin.entity.User;
 import com.springboot.otplogin.service.EmailService;
 import com.springboot.otplogin.service.JwtTokenService;
@@ -11,9 +12,6 @@ import com.springboot.otplogin.service.OtpService;
 import com.springboot.otplogin.service.UserService;
 import com.springboot.otplogin.service.TokenBlacklistService;
 import com.springboot.otplogin.service.LogoutAuditService;
-import io.github.bucket4j.Bandwidth;
-import io.github.bucket4j.Bucket;
-import io.github.bucket4j.Refill;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
@@ -24,10 +22,8 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.*;
 
-import java.time.Duration;
 import java.util.HashMap;
 import java.util.Map;
-import java.util.concurrent.ConcurrentHashMap;
 
 @RestController
 @RequestMapping("/api/v1/auth")
@@ -43,32 +39,18 @@ public class AuthController {
     private final TokenBlacklistService tokenBlacklistService;
     private final LogoutAuditService logoutAuditService;
 
-    private final Map<String, Bucket> ipBucketMap = new ConcurrentHashMap<>();
-    private final Map<String, Bucket> emailBucketMap = new ConcurrentHashMap<>();
-
+    
     @PostMapping("/request-otp")
-    public ResponseEntity<Map<String, String>> requestOtp(
+    public ResponseEntity<?> requestOtp(
             @Valid @RequestBody OtpRequestDto otpRequestDto,
             HttpServletRequest request) {
 
         String email = otpRequestDto.getEmail();
         String clientIp = getClientIpAddress(request);
 
-        Bucket ipBucket = getBucketForIp(clientIp);
-        if (!ipBucket.tryConsume(1)) {
-            return ResponseEntity.status(HttpStatus.TOO_MANY_REQUESTS)
-                    .body(Map.of("message", "Too many requests. Please try again later."));
-        }
-
-        Bucket emailBucket = getBucketForEmail(email);
-        if (!emailBucket.tryConsume(1)) {
-            return ResponseEntity.status(HttpStatus.TOO_MANY_REQUESTS)
-                    .body(Map.of("message", "Too many OTP attempts. Please try again later."));
-        }
-
+        // Check OTP service rate limiting (additional layer)
         if (otpService.isRateLimited(email)) {
-            return ResponseEntity.status(HttpStatus.TOO_MANY_REQUESTS)
-                    .body(Map.of("message", "Too many OTP attempts. Please try again later."));
+            throw new RateLimitExceededException("Too many OTP attempts. Please try again later.", 60);
         }
 
         try {
@@ -88,13 +70,11 @@ public class AuthController {
             User user = userService.getUserByEmail(email);
 
             if (userService.isRateLimited(user, 5, 15)) {
-                return ResponseEntity.status(HttpStatus.TOO_MANY_REQUESTS)
-                        .body(Map.of("message", "Account temporarily locked due to too many failed attempts. Please try again in 15 minutes."));
+                throw new RateLimitExceededException("Account temporarily locked due to too many failed attempts. Please try again in 15 minutes.", 900);
             }
 
             if (userService.isIpRateLimited(clientIp, 10, 15)) {
-                return ResponseEntity.status(HttpStatus.TOO_MANY_REQUESTS)
-                        .body(Map.of("message", "IP temporarily blocked due to too many failed attempts. Please try again in 15 minutes."));
+                throw new RateLimitExceededException("IP temporarily blocked due to too many failed attempts. Please try again in 15 minutes.", 900);
             }
 
             String otp = otpService.generateOtp(email);
@@ -108,13 +88,16 @@ public class AuthController {
 
             log.info("OTP requested for email: {} from IP: {}. OTP: {} (DEV MODE)", email, clientIp, otp);
 
-            Map<String, String> response = new HashMap<>();
+            Map<String, Object> response = new HashMap<>();
             response.put("message", "OTP has been sent to your email");
             response.put("email", email);
-            response.put("expiresIn", String.valueOf(otpService.getOtpTtl(email)));
+            response.put("expiresIn", otpService.getOtpTtl(email));
 
             return ResponseEntity.ok(response);
 
+        } catch (RateLimitExceededException e) {
+            // Re-throw rate limit exceptions to be handled by global exception handler
+            throw e;
         } catch (Exception e) {
             log.error("Error sending OTP to {}: {}", email, e.getMessage());
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
@@ -225,13 +208,6 @@ public class AuthController {
         String email = signupRequestDto.getEmail();
         String name = signupRequestDto.getName();
         String clientIp = getClientIpAddress(request);
-
-        // Quick rate limiting check
-        if (!getBucketForIp(clientIp).tryConsume(1) || !getBucketForEmail(email).tryConsume(1)) {
-            return ResponseEntity.status(HttpStatus.TOO_MANY_REQUESTS)
-                    .body(Map.of("message", "Too many requests. Please try again later."));
-        }
-
         try {
             // Check if user exists and create in one operation to minimize DB calls
             User newUser = userService.createUserIfNotExists(email, name);
@@ -284,24 +260,5 @@ public class AuthController {
         }
 
         return request.getRemoteAddr();
-    }
-
-    private Bucket getBucketForIp(String ip) {
-        return ipBucketMap.computeIfAbsent(ip, ignored -> {
-            Bandwidth limit = Bandwidth.classic(10, Refill.intervally(10, Duration.ofMinutes(1)));
-            return Bucket.builder()
-                    .addLimit(limit)
-                    .build();
-        });
-    }
-
-    private Bucket getBucketForEmail(String email) {
-        return emailBucketMap.computeIfAbsent(email, ignored -> {
-            // Limit to 5 requests per minute per email
-            Bandwidth limit = Bandwidth.classic(5, Refill.intervally(5, Duration.ofMinutes(1)));
-            return Bucket.builder()
-                    .addLimit(limit)
-                    .build();
-        });
     }
 }

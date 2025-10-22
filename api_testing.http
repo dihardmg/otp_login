@@ -4,9 +4,10 @@
 @baseUrl = http://localhost:8081/api/v1
 @userEmail = mcrdik@gmail.com
 ### @userEmail = lareosenglab@gmail.com
-@accessToken =eyJhbGciOiJIUzI1NiJ9.eyJ0eXBlIjoiYWNjZXNzIiwianRpIjoiMTNhOWEzY2ItN2QyNy00ZTVkLTgzZWEtYWNhZTBjN2FhN2NmIiwic3ViIjoibGFyZW9zZW5nbGFiQGdtYWlsLmNvbSIsImlhdCI6MTc2MTA1NTI3MywiZXhwIjoxNzYxMDU2MTcyfQ.4DIfReHcnIfRfLcXIus0G3rwnu85z-VSNaNmvZZblZY
+@accessToken =eyJhbGciOiJIUzI1NiJ9.eyJ0eXBlIjoiYWNjZXNzIiwianRpIjoiYjUyMTAxN2QtZjQwNC00MmU5LWIxY2MtZjI3MmQ0ZTk1YzY5Iiwic3ViIjoibWNyZGlrQGdtYWlsLmNvbSIsImlhdCI6MTc2MTExMzU2OCwiZXhwIjoxNzYxMTE0NDY4fQ.8XHVEtwoe1uJbjKv7bL9jcLIS6lu62gk49km12qBeFM
 
-@refreshToken = eyJhbGciOiJIUzI1NiJ9.eyJ0eXBlIjoicmVmcmVzaCIsImp0aSI6ImU1ZmNlZjYyLTgxMjEtNDY5MS05YWU1LTJjYzliY2VkZTMzNiIsInN1YiI6ImxhcmVvc2VuZ2xhYkBnbWFpbC5jb20iLCJpYXQiOjE3NjEwNTUyNzMsImV4cCI6MTc2MzY0NzI3M30.X5h7NxHQAOBbtrPTYVQlso64znmyeLz4NMwXUobtn_s
+@refreshToken = eyJhbGciOiJIUzI1NiJ9.eyJ0eXBlIjoicmVmcmVzaCIsImp0aSI6ImI5M2U4NDkzLWI3OWUtNDNhMy05ZGU3LWE3YmE1MThmODM1YiIsInN1YiI6Im1jcmRpa0BnbWFpbC5jb20iLCJpYXQiOjE3NjExMTM1NjgsImV4cCI6MTc2MzcwNTU2OH0.lXI0TzGZ3CnfPjZHK037a6qQk_L3fdd1a8KKesmXzYI
+
 
 ### 1. Health Check
 GET {{baseUrl}}/actuator/health
@@ -188,8 +189,8 @@ POST {{baseUrl}}/auth/signup
 Content-Type: application/json
 
 {
-  "name": "Rate Limit Test 1",
-  "email": "ratelimit1@example.com"
+  "name": "",
+  "email": "a"
 }
 
 ###
@@ -266,7 +267,7 @@ Content-Type: application/json
 
 {
   "email": "{{userEmail}}",
-  "otp": "456387"
+  "otp": "897617"
 }
 
 > {%
@@ -423,12 +424,113 @@ POST {{baseUrl}}/auth/request-otp
 Content-Type: application/json
 
 {
-  "email": "invalid-email"
+  "email": "invalid-mail"
 }
 
 > {%
 client.test("Invalid Email Fails", function() {
     client.assert(response.status === 400, "Response status is 400 for invalid email");
+    client.assert(response.body.type === "https://example.com/problems/validation-error", "Validation error type");
+    client.assert(response.body.title === "Validation Failed", "Validation error title");
+    client.assert(response.body.status === 400, "Response status code is 400");
+    client.assert(response.body.errors.email.includes("Invalid email format"), "Invalid email error message");
+    client.assert(response.body.timestamp, "Timestamp exists");
+});
+%}
+
+### 12a. Enhanced Rate Limiting Test - Invalid Email Multiple Requests (Should get 429)
+POST {{baseUrl}}/auth/request-otp
+Content-Type: application/json
+
+{
+  "email": "invalid-mail"
+}
+
+> {%
+client.test("Rate Limiting Test - Invalid Email Request 1", function() {
+    client.assert(response.status === 400, "Response status is 400 for invalid email");
+    client.assert(response.body.type === "https://example.com/problems/validation-error", "Validation error type");
+    client.assert(response.headers["x-ratelimit-limit"], "Rate limit header exists");
+});
+%}
+
+###
+POST {{baseUrl}}/auth/request-otp
+Content-Type: application/json
+
+{
+  "email": "invalid-mail"
+}
+
+> {%
+client.test("Rate Limiting Test - Invalid Email Request 2", function() {
+    client.assert(response.status === 400, "Response status is 400 for invalid email");
+});
+%}
+
+###
+POST {{baseUrl}}/auth/request-otp
+Content-Type: application/json
+
+{
+  "email": "invalid-mail"
+}
+
+> {%
+client.test("Rate Limiting Test - Invalid Email Request 3", function() {
+    client.assert(response.status === 400, "Response status is 400 for invalid email");
+});
+%}
+
+###
+POST {{baseUrl}}/auth/request-otp
+Content-Type: application/json
+
+{
+  "email": "invalid-mail"
+}
+
+> {%
+client.test("Rate Limiting Test - Invalid Email Request 4", function() {
+    client.assert(response.status === 400, "Response status is 400 for invalid email");
+});
+%}
+
+###
+POST {{baseUrl}}/auth/request-otp
+Content-Type: application/json
+
+{
+  "email": "invalid-mail"
+}
+
+> {%
+client.test("Rate Limiting Test - Invalid Email Request 5", function() {
+    client.assert(response.status === 400, "Response status is 400 for invalid email");
+});
+%}
+
+###
+POST {{baseUrl}}/auth/request-otp
+Content-Type: application/json
+
+{
+  "email": "invalid-mail"
+}
+
+> {%
+client.test("Rate Limiting Test - Invalid Email Request 6 (Should get 429)", function() {
+    client.assert(response.status === 429, "Response status is 429 for rate limited email");
+    client.assert(response.body.type === "https://example.com/problems/rate-limit-exceeded", "Rate limit error type");
+    client.assert(response.body.title === "Too Many Requests", "Rate limit error title");
+    client.assert(response.body.status === 429, "Response status code is 429");
+    client.assert(response.body.detail.includes("Email rate limit exceeded"), "Rate limit detail message");
+    client.assert(response.body.retryAfter > 0, "Retry after seconds provided");
+    client.assert(response.headers["retry-after"], "Retry-After header exists");
+    client.assert(response.headers["x-ratelimit-limit"], "Rate limit header exists");
+    client.assert(response.headers["x-ratelimit-remaining"], "Rate limit remaining header exists");
+    client.assert(response.headers["x-ratelimit-reset"], "Rate limit reset header exists");
+    client.assert(response.body.timestamp, "Timestamp exists");
 });
 %}
 
@@ -441,6 +543,8 @@ Content-Type: application/json
 > {%
 client.test("Empty Request Fails", function() {
     client.assert(response.status === 400, "Response status is 400 for empty request");
+    client.assert(response.body.type === "https://example.com/problems/validation-error", "Validation error type");
+    client.assert(response.body.errors.email.includes("must not be blank"), "Email blank error message");
 });
 %}
 

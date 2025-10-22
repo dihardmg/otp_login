@@ -7,7 +7,7 @@ import lombok.Data;
 @Data
 public class OtpRequestDto {
 
-    @NotBlank(message = "Email is required")
+    @NotBlank(message = "must not be blank")
     @Email(message = "Invalid email format")
     private String email;
 }
