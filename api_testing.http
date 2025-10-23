@@ -82,7 +82,7 @@ Content-Type: application/json
 
 {
   "name": "A",
-  "email": "test@example.com"
+  "email": "tesexample.com"
 }
 
 > {%
@@ -181,14 +181,20 @@ client.test("Special Characters Name Signup", function() {
 });
 %}
 
-### 13. Signup Rate Limiting Test - Multiple Quick Requests (Should trigger rate limit)
+### 13. Signup Rate Limiting Test - Multiple Quick Requests for Same Email (Should trigger rate limit)
 POST {{baseUrl}}/auth/signup
 Content-Type: application/json
 
 {
-  "name": "",
-  "email": "a"
+  "name": "Rate Limit Test 1",
+  "email": "ratelimit@example.com"
 }
+
+> {%
+client.test("Signup Rate Limit Test 1/5", function() {
+    client.assert(response.status === 201 || response.status === 409, "Response should be 201 (new) or 409 (existing)");
+});
+%}
 
 ###
 POST {{baseUrl}}/auth/signup
@@ -196,8 +202,18 @@ Content-Type: application/json
 
 {
   "name": "Rate Limit Test 2",
-  "email": "ratelimit2@example.com"
+  "email": "ratelimit@example.com"
 }
+
+> {%
+client.test("Signup Rate Limit Test 2/5", function() {
+    client.assert(response.status === 201 || response.status === 409 || response.status === 429, "Response should be 201, 409, or 429");
+    if (response.status === 429) {
+        client.assert(response.body.code === 429, "Response code is 429");
+        client.assert(response.body.status === "TOO MANY REQUESTS", "Response status is 'TOO MANY REQUESTS'");
+    }
+});
+%}
 
 ###
 POST {{baseUrl}}/auth/signup
@@ -205,8 +221,14 @@ Content-Type: application/json
 
 {
   "name": "Rate Limit Test 3",
-  "email": "ratelimit3@example.com"
+  "email": "ratelimit@example.com"
 }
+
+> {%
+client.test("Signup Rate Limit Test 3/5", function() {
+    client.assert(response.status === 201 || response.status === 409 || response.status === 429, "Response should be 201, 409, or 429");
+});
+%}
 
 ###
 POST {{baseUrl}}/auth/signup
@@ -214,8 +236,14 @@ Content-Type: application/json
 
 {
   "name": "Rate Limit Test 4",
-  "email": "ratelimit4@example.com"
+  "email": "ratelimit@example.com"
 }
+
+> {%
+client.test("Signup Rate Limit Test 4/5", function() {
+    client.assert(response.status === 201 || response.status === 409 || response.status === 429, "Response should be 201, 409, or 429");
+});
+%}
 
 ###
 POST {{baseUrl}}/auth/signup
@@ -223,22 +251,123 @@ Content-Type: application/json
 
 {
   "name": "Rate Limit Test 5",
-  "email": "ratelimit9@example.com"
+  "email": "rai@example.com"
 }
+
+> {%
+client.test("Signup Rate Limit Test 5/5", function() {
+    client.assert(response.status === 201 || response.status === 409 || response.status === 429, "Response should be 201, 409, or 429");
+});
+%}
 
 ###
 POST {{baseUrl}}/auth/signup
 Content-Type: application/json
 
 {
-  "name": "agusti bayu",
-  "email": "agustibayu.abs@gmail.com"
+  "name": "Rate Limit Test 6",
+  "email": "ratelimit@example.com"
 }
 
 > {%
-client.test("Signup Rate Limiting Works", function() {
+client.test("Signup Rate Limit Test 6/6 (Should be rate limited)", function() {
     client.assert(response.status === 429, "Response status is 429 for rate limited signup");
-    client.assert(response.body.message.includes("Too many requests"), "Rate limiting message received");
+    client.assert(response.body.code === 429, "Response code is 429");
+    client.assert(response.body.status === "TOO MANY REQUESTS", "Response status is 'TOO MANY REQUESTS'");
+    client.assert(response.body.message.includes("Too many signup attempts for this email"), "Email rate limiting message received");
+});
+%}
+
+### 14. Test Existing Email Rate Limiting (Should get rate limited after 5 attempts)
+POST {{baseUrl}}/auth/signup
+Content-Type: application/json
+
+{
+  "name": "Existing Email Test 1",
+  "email": "{{userEmail}}"
+}
+
+> {%
+client.test("Existing Email Test 1/5", function() {
+    client.assert(response.status === 409 || response.status === 429, "Response should be 409 (existing) or 429 (rate limited)");
+});
+%}
+
+###
+POST {{baseUrl}}/auth/signup
+Content-Type: application/json
+
+{
+  "name": "Existing Email Test 2",
+  "email": "{{userEmail}}"
+}
+
+> {%
+client.test("Existing Email Test 2/5", function() {
+    client.assert(response.status === 409 || response.status === 429, "Response should be 409 (existing) or 429 (rate limited)");
+});
+%}
+
+###
+POST {{baseUrl}}/auth/signup
+Content-Type: application/json
+
+{
+  "name": "Existing Email Test 3",
+  "email": "{{userEmail}}"
+}
+
+> {%
+client.test("Existing Email Test 3/5", function() {
+    client.assert(response.status === 409 || response.status === 429, "Response should be 409 (existing) or 429 (rate limited)");
+});
+%}
+
+###
+POST {{baseUrl}}/auth/signup
+Content-Type: application/json
+
+{
+  "name": "Existing Email Test 4",
+  "email": "{{userEmail}}"
+}
+
+> {%
+client.test("Existing Email Test 4/5", function() {
+    client.assert(response.status === 409 || response.status === 429, "Response should be 409 (existing) or 429 (rate limited)");
+});
+%}
+
+###
+POST {{baseUrl}}/auth/signup
+Content-Type: application/json
+
+{
+  "name": "Existing Email Test 5",
+  "email": "{{userEmail}}"
+}
+
+> {%
+client.test("Existing Email Test 5/5", function() {
+    client.assert(response.status === 409 || response.status === 429, "Response should be 409 (existing) or 429 (rate limited)");
+});
+%}
+
+###
+POST {{baseUrl}}/auth/signup
+Content-Type: application/json
+
+{
+  "name": "Existing Email Test 6",
+  "email": "{{userEmail}}"
+}
+
+> {%
+client.test("Existing Email Test 6/6 (Should be rate limited)", function() {
+    client.assert(response.status === 429, "Response status is 429 for rate limited existing email");
+    client.assert(response.body.code === 429, "Response code is 429");
+    client.assert(response.body.status === "TOO MANY REQUESTS", "Response status is 'TOO MANY REQUESTS'");
+    client.assert(response.body.message.includes("Too many signup attempts for this email"), "Rate limiting properly applied to existing email");
 });
 %}
 

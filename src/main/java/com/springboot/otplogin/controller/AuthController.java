@@ -12,6 +12,7 @@ import com.springboot.otplogin.service.OtpService;
 import com.springboot.otplogin.service.UserService;
 import com.springboot.otplogin.service.TokenBlacklistService;
 import com.springboot.otplogin.service.LogoutAuditService;
+import com.springboot.otplogin.exception.RateLimitExceededException;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
@@ -22,8 +23,13 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.*;
 
+import java.time.Duration;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
+import io.github.bucket4j.Bandwidth;
+import io.github.bucket4j.Bucket;
+import io.github.bucket4j.Refill;
 
 @RestController
 @RequestMapping("/api/v1/auth")
@@ -39,7 +45,10 @@ public class AuthController {
     private final TokenBlacklistService tokenBlacklistService;
     private final LogoutAuditService logoutAuditService;
 
-    
+    // Rate limiting buckets for signup
+    private final Map<String, Bucket> emailBucketMap = new ConcurrentHashMap<>();
+    private final Map<String, Bucket> ipBucketMap = new ConcurrentHashMap<>();
+
     @PostMapping("/request-otp")
     public ResponseEntity<?> requestOtp(
             @Valid @RequestBody OtpRequestDto otpRequestDto,
@@ -70,11 +79,14 @@ public class AuthController {
             User user = userService.getUserByEmail(email);
 
             if (userService.isRateLimited(user, 5, 15)) {
-                throw new RateLimitExceededException("Account temporarily locked due to too many failed attempts. Please try again in 15 minutes.", 900);
+                throw new RateLimitExceededException(
+                        "Account temporarily locked due to too many failed attempts. Please try again in 15 minutes.",
+                        900);
             }
 
             if (userService.isIpRateLimited(clientIp, 10, 15)) {
-                throw new RateLimitExceededException("IP temporarily blocked due to too many failed attempts. Please try again in 15 minutes.", 900);
+                throw new RateLimitExceededException(
+                        "IP temporarily blocked due to too many failed attempts. Please try again in 15 minutes.", 900);
             }
 
             String otp = otpService.generateOtp(email);
@@ -214,12 +226,37 @@ public class AuthController {
         String email = signupRequestDto.getEmail();
         String name = signupRequestDto.getName();
         String clientIp = getClientIpAddress(request);
+
         try {
+            // Apply rate limiting BEFORE checking email existence to prevent email
+            // enumeration attacks
+            Bucket emailBucket = getBucketForEmail(email);
+            if (!emailBucket.tryConsume(1)) {
+                Map<String, String> rateLimitResponse = new HashMap<>();
+                rateLimitResponse.put("code", "429");
+                rateLimitResponse.put("status", "TOO_MANY REQUESTS");
+                rateLimitResponse.put("message", "Too many signup attempts for this email. Please try again later.");
+                return ResponseEntity.status(HttpStatus.TOO_MANY_REQUESTS)
+                        .body(rateLimitResponse);
+            }
+
+            Bucket ipBucket = getBucketForIp(clientIp);
+            if (!ipBucket.tryConsume(1)) {
+                Map<String, String> rateLimitResponse = new HashMap<>();
+                rateLimitResponse.put("code", "429");
+                rateLimitResponse.put("status", "TOO_MANY REQUESTS");
+                rateLimitResponse.put("message", "Too many signup attempts from this IP. Please try again later.");
+                return ResponseEntity.status(HttpStatus.TOO_MANY_REQUESTS)
+                        .body(rateLimitResponse);
+            }
+
             // Check if user exists and create in one operation to minimize DB calls
             User newUser = userService.createUserIfNotExists(email, name);
             if (newUser == null) {
-                return ResponseEntity.status(HttpStatus.CONFLICT)
-                        .body(Map.of("message", "User with this email already exists"));
+                return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                        .body(Map.of("code", "400",
+                                "status", "BAD_REQUEST",
+                                "message", "User with this email already exists"));
             }
 
             // Send email asynchronously - don't block response
@@ -241,8 +278,7 @@ public class AuthController {
                             "message", "User registered successfully",
                             "email", email,
                             "name", name,
-                            "userId", String.valueOf(newUser.getId())
-                    ));
+                            "userId", String.valueOf(newUser.getId())));
 
         } catch (IllegalArgumentException e) {
             return ResponseEntity.status(HttpStatus.BAD_REQUEST)
@@ -266,5 +302,23 @@ public class AuthController {
         }
 
         return request.getRemoteAddr();
+    }
+
+    private Bucket getBucketForEmail(String email) {
+        return emailBucketMap.computeIfAbsent(email, ignored -> {
+            Bandwidth limit = Bandwidth.classic(5, Refill.intervally(5, Duration.ofMinutes(1)));
+            return Bucket.builder()
+                    .addLimit(limit)
+                    .build();
+        });
+    }
+
+    private Bucket getBucketForIp(String ip) {
+        return ipBucketMap.computeIfAbsent(ip, ignored -> {
+            Bandwidth limit = Bandwidth.classic(10, Refill.intervally(10, Duration.ofMinutes(1)));
+            return Bucket.builder()
+                    .addLimit(limit)
+                    .build();
+        });
     }
 }

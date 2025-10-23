@@ -11,7 +11,9 @@
       "Bash(taskkill:*)",
       "Bash(powershell \"Stop-Process -Id 5700 -Force\")",
       "Bash(netstat:*)",
-      "Bash(findstr:*)"
+      "Bash(findstr:*)",
+      "Bash(powershell:*)",
+      "Bash(tasklist:*)"
     ],
     "deny": [],
     "ask": []
