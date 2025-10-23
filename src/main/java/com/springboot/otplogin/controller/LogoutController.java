@@ -40,6 +40,11 @@ public class LogoutController {
                 tokenBlacklistService.blacklistToken(token, "User logout", clientIp, userAgent);
 
                 String email = extractEmailFromToken(token);
+
+                // Blacklist all refresh tokens for the user to prevent token reuse
+                tokenBlacklistService.blacklistAllUserTokensByType(email, "refresh",
+                        "User logout - invalidate refresh tokens", clientIp, userAgent);
+
                 otpService.clearOtp(email);
 
                 log.info("User logged out successfully - Email: {}, IP: {}, User-Agent: {}",

@@ -4,11 +4,8 @@
 @baseUrl = http://localhost:8081/api/v1
 @userEmail = mcrdik@gmail.com
 ### @userEmail = lareosenglab@gmail.com
-@accessToken =eyJhbGciOiJIUzI1NiJ9.eyJ0eXBlIjoiYWNjZXNzIiwianRpIjoiYjUyMTAxN2QtZjQwNC00MmU5LWIxY2MtZjI3MmQ0ZTk1YzY5Iiwic3ViIjoibWNyZGlrQGdtYWlsLmNvbSIsImlhdCI6MTc2MTExMzU2OCwiZXhwIjoxNzYxMTE0NDY4fQ.8XHVEtwoe1uJbjKv7bL9jcLIS6lu62gk49km12qBeFM
-
-@refreshToken = eyJhbGciOiJIUzI1NiJ9.eyJ0eXBlIjoicmVmcmVzaCIsImp0aSI6ImI5M2U4NDkzLWI3OWUtNDNhMy05ZGU3LWE3YmE1MThmODM1YiIsInN1YiI6Im1jcmRpa0BnbWFpbC5jb20iLCJpYXQiOjE3NjExMTM1NjgsImV4cCI6MTc2MzcwNTU2OH0.lXI0TzGZ3CnfPjZHK037a6qQk_L3fdd1a8KKesmXzYI
-
-
+@accessToken =eyJhbGciOiJIUzI1NiJ9.eyJ0eXBlIjoiYWNjZXNzIiwianRpIjoiOTQwYmJiYTItNGQxMS00MzMwLTkzMGUtNWI5YmMxNjM4NjI3Iiwic3ViIjoibWNyZGlrQGdtYWlsLmNvbSIsImlhdCI6MTc2MTIzMDQzNywiZXhwIjoxNzYxMjMxMzM3fQ.riETKNhbHyZMrceoOpgunnO4LmjS-hMjv14MBZPXheM
+@refreshToken = mVmcmVzaCIsImp0aSI6IjJmOGQ2MTcxLTZmOGUtNGRhYi04MDUzLTMzMGEyMmUyOTNkMiIsInN1YiI6Im1jcmRpa0BnbWFpbC5jb20iLCJpYXQiOjE3NjEyMzA0MzcsImV4cCI6MTc2MzgyMjQzN30.p2DGBy_deX1H39jm61ZeNmLYEbOAJK8LP7jX0t3J9fM
 ### 1. Health Check
 GET {{baseUrl}}/actuator/health
 
@@ -234,8 +231,8 @@ POST {{baseUrl}}/auth/signup
 Content-Type: application/json
 
 {
-  "name": "lareosenglab",
-  "email": "lareosenglab@gmail.com"
+  "name": "agusti bayu",
+  "email": "agustibayu.abs@gmail.com"
 }
 
 > {%
@@ -267,7 +264,7 @@ Content-Type: application/json
 
 {
   "email": "{{userEmail}}",
-  "otp": "897617"
+  "otp": "187783"
 }
 
 > {%
@@ -698,6 +695,123 @@ Content-Type: application/json
 client.test("Missing Refresh Token Fails", function() {
     client.assert(response.status === 400, "Response status is 400 for missing refresh token");
     client.assert(response.body.message.includes("Refresh token is required"), "Error message correct");
+});
+%}
+
+### ==================== LOGOUT TOKEN INVALIDATION TESTS ====================
+
+### 18. Test Token Invalidation After Logout - Full Flow
+# This test verifies that both access and refresh tokens are invalidated after logout
+
+# First, login to get fresh tokens
+POST {{baseUrl}}/auth/request-otp
+Content-Type: application/json
+
+{
+  "email": "{{userEmail}}"
+}
+
+> {%
+client.test("OTP Request for Logout Test", function() {
+    client.assert(response.status === 200, "Response status is 200");
+});
+%}
+
+###
+# Verify OTP with current OTP (replace with actual OTP)
+POST {{baseUrl}}/auth/verify-otp
+Content-Type: application/json
+
+{
+  "email": "{{userEmail}}",
+  "otp": "864461"
+}
+
+> {%
+client.test("Login for Logout Test", function() {
+    client.assert(response.status === 200, "Response status is 200");
+    client.assert(response.body.accessToken, "Access token received");
+    client.assert(response.body.refreshToken, "Refresh token received");
+    client.global.set("testAccessToken", response.body.accessToken);
+    client.global.set("testRefreshToken", response.body.refreshToken);
+});
+%}
+
+###
+# Verify access token works before logout
+GET {{baseUrl}}/user/profile
+Authorization: Bearer {{testAccessToken}}
+
+> {%
+client.test("Access Token Works Before Logout", function() {
+    client.assert(response.status === 200, "Response status is 200 - access token works");
+});
+%}
+
+###
+# Verify refresh token works before logout
+POST {{baseUrl}}/auth/refresh-token
+Content-Type: application/json
+
+{
+  "refreshToken": "{{testRefreshToken}}"
+}
+
+> {%
+client.test("Refresh Token Works Before Logout", function() {
+    client.assert(response.status === 200, "Response status is 200 - refresh token works");
+    client.assert(response.body.accessToken, "New access token received");
+    client.global.set("testAccessToken", response.body.accessToken);
+});
+%}
+
+###
+# Logout - This should invalidate both access and refresh tokens
+POST {{baseUrl}}/auth/logout
+Authorization: Bearer {{testAccessToken}}
+
+> {%
+client.test("Logout Invalidates Both Tokens", function() {
+    client.assert(response.status === 200, "Response status is 200");
+    client.assert(response.body.message.includes("Logged out"), "Logout message received");
+});
+%}
+
+###
+# Test 1: Try accessing protected endpoint with access token after logout (Should fail)
+GET {{baseUrl}}/user/profile
+Authorization: Bearer {{testAccessToken}}
+
+> {%
+client.test("Access Token Invalidated After Logout", function() {
+    client.assert(response.status === 401 || response.status === 403, "Access denied after logout - access token invalidated");
+});
+%}
+
+###
+# Test 2: Try using refresh token after logout (Should fail)
+POST {{baseUrl}}/auth/refresh-token
+Content-Type: application/json
+
+{
+  "refreshToken": "{{testRefreshToken}}"
+}
+
+> {%
+client.test("Refresh Token Invalidated After Logout", function() {
+    client.assert(response.status === 401, "Response status is 401 - refresh token invalidated");
+    client.assert(response.body.message.includes("Refresh token has been invalidated"), "Correct error message for blacklisted refresh token");
+});
+%}
+
+###
+# Test 3: Try accessing protected endpoint again (Double check)
+GET {{baseUrl}}/user/profile
+Authorization: Bearer {{testAccessToken}}
+
+> {%
+client.test("Access Token Still Invalidated", function() {
+    client.assert(response.status === 401 || response.status === 403, "Access still denied after logout");
 });
 %}
 

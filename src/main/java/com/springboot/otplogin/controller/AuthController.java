@@ -176,6 +176,12 @@ public class AuthController {
                         .body(Map.of("message", "Invalid refresh token"));
             }
 
+            // Check if refresh token is blacklisted
+            if (tokenBlacklistService.isTokenBlacklisted(refreshToken)) {
+                return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
+                        .body(Map.of("message", "Refresh token has been invalidated. Please login again."));
+            }
+
             String email = jwtTokenService.extractUsername(refreshToken);
             User user = userService.getUserByEmail(email);
 
