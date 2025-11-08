@@ -1,5 +1,5 @@
-# Use a lightweight Java base image with Java 25
-FROM openjdk:25-slim
+# Use the official Eclipse Temurin JDK 25 image as the base
+FROM eclipse-temurin:25-jdk
 
 # Set working directory
 WORKDIR /app

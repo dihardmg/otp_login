@@ -1,0 +1,112 @@
+
+services:
+  # PostgreSQL Database
+  postgres:
+    image: ${POSTGRES_IMAGE:-postgres:15-alpine}
+    container_name: ${POSTGRES_CONTAINER_NAME}
+    env_file:
+      - .env
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_INITDB_ARGS: "--encoding=UTF-8"
+    ports:
+      - "${POSTGRES_PORT}:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./init-scripts:/docker-entrypoint-initdb.d
+    networks:
+      - otp-network
+    restart: ${POSTGRES_RESTART:-unless-stopped}
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
+      interval: ${POSTGRES_HEALTH_INTERVAL:-10s}
+      timeout: ${POSTGRES_HEALTH_TIMEOUT:-5s}
+      retries: ${POSTGRES_HEALTH_RETRIES:-5}
+    deploy:
+      resources:
+        limits:
+          memory: ${POSTGRES_MEMORY_LIMIT:-512M}
+          cpus: ${POSTGRES_CPU_LIMIT:-0.5}
+        reservations:
+          memory: ${POSTGRES_MEMORY_RESERVATION:-256M}
+          cpus: ${POSTGRES_CPU_RESERVATION:-0.25}
+
+  # Redis Cache
+  redis:
+    image: ${REDIS_IMAGE:-redis:7-alpine}
+    container_name: ${REDIS_CONTAINER_NAME}
+    env_file:
+      - .env
+    command: redis-server --appendonly yes ${REDIS_PASSWORD_FLAG} ${REDIS_PASSWORD} --timeout ${REDIS_TIMEOUT_VALUE:-300} --tcp-keepalive 60 ${REDIS_MEMORY_SETTINGS}
+    ports:
+      - "${REDIS_PORT}:6379"
+    volumes:
+      - redis_data:/data
+    networks:
+      - otp-network
+    restart: ${REDIS_RESTART:-unless-stopped}
+    healthcheck:
+      test: ["CMD", "sh", "-c", "redis-cli -a ${REDIS_PASSWORD} ping"]
+      interval: ${REDIS_HEALTH_INTERVAL:-10s}
+      timeout: ${REDIS_HEALTH_TIMEOUT:-3s}
+      retries: ${REDIS_HEALTH_RETRIES:-3}
+    deploy:
+      resources:
+        limits:
+          memory: ${REDIS_MEMORY_LIMIT:-256M}
+          cpus: ${REDIS_CPU_LIMIT:-0.25}
+        reservations:
+          memory: ${REDIS_MEMORY_RESERVATION:-128M}
+          cpus: ${REDIS_CPU_RESERVATION:-0.1}
+
+  # Spring Boot Application
+  otp-app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: ${APP_CONTAINER_NAME}
+    env_file:
+      - .env
+    environment:
+      - SPRING_PROFILES_ACTIVE=${SPRING_PROFILES_ACTIVE}
+      - DATABASE_URL=jdbc:postgresql://postgres:5432/${POSTGRES_DB}?useSSL=${DATABASE_USE_SSL}&rewriteBatchedStatements=true${DATABASE_SSL_MODE}
+      - REDIS_HOST=redis
+    ports:
+      - "${APP_PORT}:${APP_INTERNAL_PORT}"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - otp-network
+    restart: ${APP_RESTART:-unless-stopped}
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:${APP_INTERNAL_PORT}/actuator/health"]
+      interval: ${APP_HEALTH_INTERVAL:-30s}
+      timeout: ${APP_HEALTH_TIMEOUT:-10s}
+      retries: ${APP_HEALTH_RETRIES:-3}
+      start_period: ${APP_HEALTH_START_PERIOD:-60s}
+    volumes:
+      - ${APP_LOGS_PATH:-./logs}:/app/logs
+    deploy:
+      resources:
+        limits:
+          memory: ${APP_MEMORY_LIMIT:-1G}
+          cpus: ${APP_CPU_LIMIT:-1.0}
+        reservations:
+          memory: ${APP_MEMORY_RESERVATION:-512M}
+          cpus: ${APP_CPU_RESERVATION:-0.5}
+
+  
+volumes:
+  postgres_data:
+    driver: local
+  redis_data:
+    driver: local
+
+networks:
+  otp-network:
+    driver: bridge

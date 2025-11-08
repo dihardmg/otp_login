@@ -4,8 +4,13 @@
 @baseUrl = http://localhost:8081/api/v1
 @userEmail = mcrdik@gmail.com
 ### @userEmail = lareosenglab@gmail.com
-@accessToken =eyJhbGciOiJIUzI1NiJ9.eyJ0eXBlIjoiYWNjZXNzIiwianRpIjoiOTQwYmJiYTItNGQxMS00MzMwLTkzMGUtNWI5YmMxNjM4NjI3Iiwic3ViIjoibWNyZGlrQGdtYWlsLmNvbSIsImlhdCI6MTc2MTIzMDQzNywiZXhwIjoxNzYxMjMxMzM3fQ.riETKNhbHyZMrceoOpgunnO4LmjS-hMjv14MBZPXheM
-@refreshToken = mVmcmVzaCIsImp0aSI6IjJmOGQ2MTcxLTZmOGUtNGRhYi04MDUzLTMzMGEyMmUyOTNkMiIsInN1YiI6Im1jcmRpa0BnbWFpbC5jb20iLCJpYXQiOjE3NjEyMzA0MzcsImV4cCI6MTc2MzgyMjQzN30.p2DGBy_deX1H39jm61ZeNmLYEbOAJK8LP7jX0t3J9fM
+@accessToken =eyJhbGciOiJIUzI1NiJ9.eyJ0eXBlIjoiYWNjZXNzIiwianRpIjoiZWM3MjE2ZWItZmU4OC00YTkwLTk4YjctMjJlZTAzZGMyZTMyIiwic3ViIjoibWNyZGlrQGdtYWlsLmNvbSIsImlhdCI6MTc2MjU5NTE2NCwiZXhwIjoxNzYyNTk2MDY0fQ.3S6sjShInwhWaBijKpG2nL28kxl4Vuk0_3sfYlHKV8M
+
+
+
+@refreshToken =eyJhbGciOiJIUzI1NiJ9.eyJ0eXBlIjoicmVmcmVzaCIsImp0aSI6IjEzMTU5ZDM1LTQ4ZmUtNDMxZS1hNzY2LTg1MDA0ZDBjZDBiYiIsInN1YiI6Im1jcmRpa0BnbWFpbC5jb20iLCJpYXQiOjE3NjI1OTUxNjQsImV4cCI6MTc2NTE4NzE2NH0.YuFZL1xxKMRzzHu2KAsr5oEKQuh0WgLPG885orb25fo
+
+
 ### 1. Health Check
 GET {{baseUrl}}/actuator/health
 
@@ -393,7 +398,7 @@ Content-Type: application/json
 
 {
   "email": "{{userEmail}}",
-  "otp": "187783"
+  "otp": "399928"
 }
 
 > {%
@@ -869,7 +874,7 @@ client.test("Login for Logout Test", function() {
 ###
 # Verify access token works before logout
 GET {{baseUrl}}/user/profile
-Authorization: Bearer {{testAccessToken}}
+Authorization: Bearer {{AccessToken}}
 
 > {%
 client.test("Access Token Works Before Logout", function() {

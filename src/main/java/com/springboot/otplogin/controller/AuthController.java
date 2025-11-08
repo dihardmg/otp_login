@@ -98,7 +98,7 @@ public class AuthController {
                 // Continue even if email fails for development
             }
 
-            log.info("OTP requested for email: {} from IP: {}. OTP: {} (DEV MODE)", email, clientIp, otp);
+            log.debug("OTP requested for email: {} from IP: {}. OTP: {} (DEV MODE)", email, clientIp, otp);
 
             Map<String, Object> response = new HashMap<>();
             response.put("message", "OTP has been sent to your email");

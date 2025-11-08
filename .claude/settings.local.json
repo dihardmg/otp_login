@@ -13,7 +13,12 @@
       "Bash(netstat:*)",
       "Bash(findstr:*)",
       "Bash(powershell:*)",
-      "Bash(tasklist:*)"
+      "Bash(tasklist:*)",
+      "Bash(docker exec:*)",
+      "Bash(docker logs:*)",
+      "Bash(docker inspect:*)",
+      "Bash(docker compose logs:*)",
+      "Bash(docker compose:*)"
     ],
     "deny": [],
     "ask": []
